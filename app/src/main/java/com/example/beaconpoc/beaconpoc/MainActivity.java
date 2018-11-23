@@ -5,7 +5,6 @@ import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -13,11 +12,11 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -37,7 +36,7 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     private BeaconManager beaconManager;
     private BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
 
-    private final String TAG = "com.example.beaconpoc.beaconpoc";
+    private final String TAG = "com.example.beaconpoc";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -165,12 +164,18 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         beaconManager.addMonitorNotifier(new MonitorNotifier() {
             @Override
             public void didEnterRegion(Region region) {
-                Log.i(TAG, "I just saw an beacon for the first time!"); 
+                Log.i(TAG, "I just saw an beacon for the first time!");
+                MediaPlayer mp=MediaPlayer.create(getApplicationContext(),R.raw.on);// the song is a filename which i have pasted inside a folder **raw** created under the **res** folder.//
+                mp.start();
+
             }
 
             @Override
             public void didExitRegion(Region region) {
                 Log.i(TAG, "I no longer see an beacon");
+                MediaPlayer mp=MediaPlayer.create(getApplicationContext(),R.raw.off);// the song is a filename which i have pasted inside a folder **raw** created under the **res** folder.//
+                mp.start();
+
             }
 
             @Override

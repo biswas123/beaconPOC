@@ -165,7 +165,7 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         beaconManager.addMonitorNotifier(new MonitorNotifier() {
             @Override
             public void didEnterRegion(Region region) {
-                Log.i(TAG, "I just saw an beacon for the first time!");
+                Log.i(TAG, "I just saw an beacon for the first time!"); 
             }
 
             @Override

@@ -5,6 +5,7 @@ import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -55,9 +56,7 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        beaconManager = BeaconManager.getInstanceForApplication(this);
 
-        beaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24"));
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -84,6 +83,10 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         this.registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
         this.registerReceiver(mReceiver, new IntentFilter(LocationManager.MODE_CHANGED_ACTION));
 
+
+        beaconManager = BeaconManager.getInstanceForApplication(this);
+        beaconManager.getBeaconParsers().add(new BeaconParser().setBeaconLayout("m:2-3=0215,i:4-19,i:20-21,i:22-23,p:24-24"));
+
         Notification.Builder builder = new Notification.Builder(MainActivity.this);
         builder.setSmallIcon(R.mipmap.ic_launcher);
         builder.setContentTitle("Scanning for Beacons");
@@ -94,12 +97,18 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             NotificationManager notificationManager = (NotificationManager) getSystemService(
                     Context.NOTIFICATION_SERVICE);
             notificationManager.createNotificationChannel(channel);
+
+            PendingIntent contentIntent = PendingIntent.getActivity(this, 0,
+                    new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT);
+
+            builder.setContentIntent(contentIntent);
             builder.setChannelId(channel.getId());
         }
         beaconManager.enableForegroundServiceScanning(builder.build(), 456);
         beaconManager.setEnableScheduledScanJobs(false);
         beaconManager.setRegionStatePersistenceEnabled(false);
-        beaconManager.bind(MainActivity.this);
+        beaconManager.bind(this);
+
     }
 
 
@@ -166,7 +175,7 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
                     return;
                 }
 
-            }else if (action.equals(LocationManager.MODE_CHANGED_ACTION)){
+            } else if (action.equals(LocationManager.MODE_CHANGED_ACTION)) {
                 final LocationManager manager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 
                 if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
@@ -183,9 +192,9 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         final RangeNotifier rangeNotifier = new RangeNotifier() {
             @Override
             public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
-                for (Beacon beacon: beacons) {
+                for (Beacon beacon : beacons) {
                     if (beacon.getDistance() < 3.0) {
-                        Toast.makeText(MainActivity.this, "I see a beacon that is less than 5 meters away. "+ beacon.getId1()+":"+beacon.getId2()+":"+beacon.getId3()+":"+beacon.getDistance(), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "I see a beacon that is less than 5 meters away. " + beacon.getId1() + ":" + beacon.getId2() + ":" + beacon.getId3() + ":" + beacon.getDistance(), Toast.LENGTH_SHORT).show();
                         try {
                             beaconManager.stopRangingBeaconsInRegion(region);
                         } catch (RemoteException e) {
@@ -211,6 +220,9 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
+
+                Toast.makeText(MainActivity.this, "I see a Beacon entered.", Toast.LENGTH_LONG).show();
+
             }
 
             @Override
@@ -223,6 +235,8 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
+                Toast.makeText(MainActivity.this, "I see a Beacon exited.", Toast.LENGTH_LONG).show();
+
             }
 
             @Override
@@ -289,7 +303,8 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if (id == R.id.exit) {
+            finish();
             return true;
         }
 

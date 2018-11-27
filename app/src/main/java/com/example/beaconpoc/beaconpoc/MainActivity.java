@@ -25,6 +25,8 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
@@ -40,6 +42,7 @@ import org.altbeacon.beacon.MonitorNotifier;
 import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 
@@ -49,7 +52,14 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     private BeaconManager beaconManager;
     private BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
 
+    private final int FOREGROUND_NOTIFICATION_ID = 10001;
     private final String TAG = "com.example.beaconpoc";
+
+
+    private RecyclerView mRecyclerView;
+    private LinearLayoutManager mLayoutManager;
+    private MyAdapter mAdapter;
+    ArrayList<String> data = new ArrayList<String>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -104,10 +114,25 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             builder.setContentIntent(contentIntent);
             builder.setChannelId(channel.getId());
         }
-        beaconManager.enableForegroundServiceScanning(builder.build(), 456);
+        beaconManager.enableForegroundServiceScanning(builder.build(), FOREGROUND_NOTIFICATION_ID);
         beaconManager.setEnableScheduledScanJobs(false);
         beaconManager.setRegionStatePersistenceEnabled(false);
         beaconManager.bind(this);
+
+        mRecyclerView = (RecyclerView) findViewById(R.id.my_recycler_view);
+
+        // use this setting to improve performance if you know that changes
+        // in content do not change the layout size of the RecyclerView
+        mRecyclerView.setHasFixedSize(true);
+
+        // use a linear layout manager
+        mLayoutManager = new LinearLayoutManager(this);
+        mRecyclerView.setLayoutManager(mLayoutManager);
+
+        // specify an adapter (see also next example)
+
+         mAdapter = new MyAdapter(data);
+        mRecyclerView.setAdapter(mAdapter);
 
     }
 
@@ -194,7 +219,11 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
                 for (Beacon beacon : beacons) {
                     if (beacon.getDistance() < 3.0) {
-                        Toast.makeText(MainActivity.this, "I see a beacon that is less than 5 meters away. " + beacon.getId1() + ":" + beacon.getId2() + ":" + beacon.getId3() + ":" + beacon.getDistance(), Toast.LENGTH_SHORT).show();
+                        String info = "I see a beacon that is less than 5 meters away. " + beacon.getId1() + ":" + beacon.getId2() + ":" + beacon.getId3() + ":" + beacon.getDistance();
+                        data.add(info);
+                        mAdapter.notifyDataSetChanged();
+
+                        Toast.makeText(MainActivity.this, info, Toast.LENGTH_SHORT).show();
                         try {
                             beaconManager.stopRangingBeaconsInRegion(region);
                         } catch (RemoteException e) {

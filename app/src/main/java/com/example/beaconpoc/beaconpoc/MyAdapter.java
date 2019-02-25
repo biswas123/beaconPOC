@@ -21,6 +21,7 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyViewHolder> {
         public TextView uuid;
         public TextView minor;
         public TextView distance;
+        public TextView name;
 
         public MyViewHolder(View view) {
             super(view);
@@ -28,6 +29,7 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyViewHolder> {
             major = (TextView) view.findViewById(R.id.major);
             minor = (TextView) view.findViewById(R.id.minor);
             distance = (TextView) view.findViewById(R.id.distance);
+            name = (TextView) view.findViewById(R.id.name);
         }
     }
 
@@ -52,11 +54,12 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyViewHolder> {
     public void onBindViewHolder(MyViewHolder holder, int position) {
         // - get element from your dataset at this position
         // - replace the contents of the view with that element
-        BeaconInfo movie = beaconInfoList.get(position);
-        holder.uuid.setText(movie.getUuid());
-        holder.major.setText(String.valueOf(movie.getMajor()));
-        holder.minor.setText(String.valueOf(movie.getMinor()));
-        holder.distance.setText(String.format("%.2f",movie.getDistance()) + "m");
+        BeaconInfo beaconInfo = beaconInfoList.get(position);
+        holder.name.setText(beaconInfo.getName());
+        holder.uuid.setText("UUID: " + beaconInfo.getUuid());
+        holder.major.setText("Major: " + String.valueOf(beaconInfo.getMajor()));
+        holder.minor.setText("Minor: " + String.valueOf(beaconInfo.getMinor()));
+        holder.distance.setText("Approx. distance: " + String.format("%.2f", beaconInfo.getDistance()) + "m");
 
     }
 

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.beaconpoc.beaconpoc" android:versionCode="2000" android:versionName="2.0.0">
+    package="com.example.beaconpoc.beaconpoc" android:versionCode="5000" android:versionName="5.0.0">
 
 
     <application

@@ -13,6 +13,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
@@ -33,15 +34,22 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.telephony.TelephonyManager;
+import android.text.Editable;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.altbeacon.beacon.Beacon;
 import org.altbeacon.beacon.BeaconConsumer;
 import org.altbeacon.beacon.BeaconManager;
 import org.altbeacon.beacon.BeaconParser;
+import org.altbeacon.beacon.Identifier;
 import org.altbeacon.beacon.MonitorNotifier;
 import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
@@ -56,11 +64,14 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -72,7 +83,7 @@ import static com.example.beaconpoc.beaconpoc.OkHttpHandler.JSON;
 public class MainActivity extends AppCompatActivity implements BeaconConsumer {
 
     private static final int PERMISSION_ALL = 10;
-    private static final long BEACONS_RETRRIEVE_TIME_IN_SECONDS = 15 * 60 * 1000L;
+    private static final long BEACONS_RETRRIEVE_TIME_IN_SECONDS = 5 * 60 * 1000L;
 
 
     private final int FOREGROUND_NOTIFICATION_ID = 10001;
@@ -92,8 +103,12 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     private BluetoothAdapter btAdapter = BluetoothAdapter.getDefaultAdapter();
 
     private String URL = "http://62.232.248.77:4053/api/";
-    //private String URL = "http://192.168.2.101:80/BeaconPOCApi/api/";
-    private static final double DISTANCE_THRESHOLD = 10.0;
+    //private String URL = "http://192.168.200.54:80/BeaconPOCApi/api/";
+
+    private SharedPreferences sharedpreferences;
+
+
+    private static final double DEFAULT_DISTANCE_THRESHOLD = 5.0;
     private HashMap<String, String> beaconMap = null;
     String[] PERMISSIONS = {
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -101,10 +116,23 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             Manifest.permission.READ_PHONE_STATE
     };
 
+    private Timer pollTimer = null;
+    private ConcurrentHashMap<Beacon, String> seenBeacons;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        seenBeacons = new ConcurrentHashMap<Beacon, String>();
+
+        SharedPreferences prefs = getSharedPreferences("APIURL", MODE_PRIVATE);
+        String APIUrl = prefs.getString("APIUrl", null);
+        if (APIUrl == null) {
+            sharedpreferences = getSharedPreferences("APIURL", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = sharedpreferences.edit();
+            editor.putString("APIUrl", URL);
+            editor.commit();
+        }
+
         Log.i(TAG, "OnCreate() called.");
         setContentView(R.layout.activity_main);
 
@@ -160,8 +188,14 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             beaconManager.setEnableScheduledScanJobs(false);
             beaconManager.setRegionStatePersistenceEnabled(false);
 
+            // set the duration of the scan to be 5.1 seconds
+           // beaconManager.setForegroundScanPeriod(5100l);
+            // set the time between each scan to be 5 seconds
+        //    beaconManager.setForegroundBetweenScanPeriod(5000l);
+            beaconManager.setForegroundScanPeriod(2100l);
+            beaconManager.setForegroundBetweenScanPeriod(2000l);
+
             Log.i(TAG, "Beacon service just got bound");
-            //backgroundPowerSaver = new BackgroundPowerSaver(this);
         }
 
         pollRegisteredBeacons();
@@ -169,7 +203,8 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     }
 
     private void pollRegisteredBeacons() {
-        new Timer().scheduleAtFixedRate(new TimerTask() {
+        pollTimer = new Timer();
+        pollTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 retrieveRegisteredBeacons();
@@ -194,7 +229,13 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
                     for (int i = 0; i < beacons.length(); i++) {
                         try {
                             JSONObject beacon = new JSONObject(beacons.get(i).toString());
-                            beaconMap.put(beacon.getString("uuid"), beacon.getString("name"));
+                            String beaconUUID = beacon.getString("uuid");
+                            String beaconName = beacon.getString("name");
+                            String beaconThreshold = beacon.getString("distanceThreshold");
+                            if (beaconThreshold.equals("null") || beaconThreshold.isEmpty()) {
+                                beaconThreshold = Double.toString(DEFAULT_DISTANCE_THRESHOLD);
+                            }
+                            beaconMap.put(beaconUUID, beaconName + "###" + beaconThreshold);
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
@@ -206,8 +247,9 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
                         }
                     });
                 }
-
-                beaconManager.bind(MainActivity.this);
+                if (!beaconManager.isBound(MainActivity.this)) {
+                    beaconManager.bind(MainActivity.this);
+                }
             }
         }).start();
     }
@@ -226,7 +268,7 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
             public void onLocationChanged(Location location) {
                 longitude = location.getLongitude();
                 latitude = location.getLatitude();
-                // Toast.makeText(getApplicationContext(), "I see you at lat: " + latitude + " long: " + longitude, Toast.LENGTH_SHORT).show();
+                //Toast.makeText(getApplicationContext(), "I see you at lat: " + latitude + " long: " + longitude, Toast.LENGTH_SHORT).show();
             }
 
             @Override
@@ -252,6 +294,56 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
 
     }
 
+    private void showURLConfigurationDialog() {
+
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = this.getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.custom_dialog, null);
+        dialogBuilder.setView(dialogView);
+
+        final EditText edt = (EditText) dialogView.findViewById(R.id.configureURL);
+        SharedPreferences prefs = getSharedPreferences("APIURL", MODE_PRIVATE);
+        String APIUrl = prefs.getString("APIUrl", null);
+        edt.setText(APIUrl);
+        final TextView tv = (TextView) dialogView.findViewById(R.id.pingResponse);
+        dialogBuilder.setTitle("Configuration");
+        dialogBuilder.setMessage("Enter API URL below:");
+        dialogBuilder.setPositiveButton("Update", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                final String url = edt.getText().toString();
+                if (!url.isEmpty()) {
+                    sharedpreferences = getSharedPreferences("APIURL", Context.MODE_PRIVATE);
+                    SharedPreferences.Editor editor = sharedpreferences.edit();
+                    editor.putString("APIUrl", url);
+                    editor.commit();
+                    Toast.makeText(MainActivity.this, "Update successful.", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        dialogBuilder.setNegativeButton("Ping server", null);
+        AlertDialog b = dialogBuilder.create();
+        b.show();
+        b.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final String url = edt.getText().toString();
+                tv.setText("Pinging server ...");
+                if (!url.isEmpty()) {
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            String response = pingURL(url);
+                            if (response != null && response.equals("OK")) {
+                                tv.setText("Connection successfully established.");
+                            } else {
+                                tv.setText("Unable to connect to server.");
+                            }
+                        }
+                    }).start();
+                }
+            }
+        });
+    }
 
     private void verifyBluetooth() {
 
@@ -337,68 +429,182 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         }
     }
 
+    public void cleanSeenBeacons(Collection<Beacon> beacons) {
+        for (Beacon seenBeacon : seenBeacons.keySet()) {
+            if (!beacons.contains(seenBeacon)) {
+                seenBeacons.remove(seenBeacon);
+
+                Log.i(TAG, "One beacon removed after instant dissapearance." + seenBeacon.getId1());
+            }
+        }
+    }
 
     RangeNotifier rangeNotifier = new RangeNotifier() {
         public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
-            for (Beacon beacon : beacons) {
-                if (beacon.getDistance() < DISTANCE_THRESHOLD) {
+            Log.i(TAG, "Did range called");
 
-                    try {
-                        OkHttpHandler okHttpHandler = new OkHttpHandler(MainActivity.this);
-                        beaconManager.stopRangingBeaconsInRegion(region);
+            if (beacons.size() > 0) {
+                cleanSeenBeacons(beacons);
+                for (Beacon beacon : beacons) {
+                    String beaconUUID = beacon.getId1().toString();
+                    String beaconName = getNameFromUUID(beaconUUID) != null ? getNameFromUUID(beaconUUID) : "Unregistered beacon";
+                    double beaconDistanceThreshold = getThresholdDistanceFromUUID(beaconUUID) != null ? Double.parseDouble(getThresholdDistanceFromUUID(beaconUUID)) : DEFAULT_DISTANCE_THRESHOLD;
+                    double beaconDistance = beacon.getDistance();
+                    int beaconMajor = Integer.parseInt(beacon.getId2().toString());
+                    int beaconMinor = Integer.parseInt(beacon.getId3().toString());
 
-                        String beaconName = getNameFromUUID(beacon.getId1().toString());
+                    if (beaconDistance <= beaconDistanceThreshold) {
+                        if (!seenBeacons.containsKey(beacon)) {
+                            String foundTime = new Date(System.currentTimeMillis()).toString();
+                            seenBeacons.put(beacon, foundTime);
 
-                        if (beaconName.isEmpty()) {
-                            beaconName = "Unregistered beacon";
-                        } else {
-                            playSoundAndVibrate(true);
+                            BeaconInfo beaconInfo = new BeaconInfo(beaconUUID, beaconMajor, beaconMinor, beaconDistance, beaconName, foundTime);
+                            beaconInfoList.add(0, beaconInfo);
+
+                            mAdapter.notifyDataSetChanged();
+                            if (!beaconName.equals("Unregistered beacon")) {
+                                playSoundAndVibrate(true);
+                            }
+                            try {
+                                OkHttpHandler okHttpHandler = new OkHttpHandler(MainActivity.this);
+                                JSONObject obj = new JSONObject();
+                                obj.put("deviceId", deviceUUID);
+                                obj.put("deviceTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Calendar.getInstance().getTime()));
+                                obj.put("uuid", beacon.getId1());
+                                obj.put("majorValue", beacon.getId2());
+                                obj.put("minorValue", beacon.getId3());
+                                obj.put("latitude", latitude);
+                                obj.put("longitude", longitude);
+                                obj.put("name", beaconName);
+
+                                String request = obj.toString();
+
+                                SharedPreferences prefs = getSharedPreferences("APIURL", MODE_PRIVATE);
+                                String APIUrl = prefs.getString("APIUrl", null);
+
+                                okHttpHandler.execute(APIUrl + "beaconInfo/create.php", request);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                         }
-
-                        BeaconInfo beaconInfo = new BeaconInfo(beacon.getId1().toString(), Integer.parseInt(beacon.getId2().toString()), Integer.parseInt(beacon.getId3().toString()), beacon.getDistance(), beaconName);
-                        beaconInfoList.add(beaconInfo);
-                        mAdapter.notifyDataSetChanged();
-
-                        try {
-
-                            JSONObject obj = new JSONObject();
-                            obj.put("deviceId", deviceUUID);
-                            obj.put("deviceTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Calendar.getInstance().getTime()));
-                            obj.put("uuid", beacon.getId1());
-                            obj.put("majorValue", beacon.getId2());
-                            obj.put("minorValue", beacon.getId3());
-                            obj.put("latitude", latitude);
-                            obj.put("longitude", longitude);
-                            obj.put("name", beaconName);
-
-                            String request = obj.toString();
-                            okHttpHandler.execute(URL + "beaconInfo/create.php", request);
-                        } catch (Exception e) {
-                            e.printStackTrace();
+                    } else {
+                        if (seenBeacons.containsKey(beacon)) {
+                            seenBeacons.remove(beacon);
+                            Toast.makeText(MainActivity.this, "A beacon crossed its distance threshold.", Toast.LENGTH_LONG).show();
+                            Log.i(TAG, "One beacon removed due to crossing distance more than threshold" + beacon.getId1());
                         }
-
-                    } catch (RemoteException e) {
-                        e.printStackTrace();
                     }
                 }
+            } else {
+                seenBeacons.clear();
+                Toast.makeText(MainActivity.this, "No beacons around.", Toast.LENGTH_LONG).show();
+                Log.i(TAG, "All seen beacons cleared");
             }
+
         }
     };
 
+
+    /* RangeNotifier rangeNotifier = new RangeNotifier() {
+         public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
+             Log.i(TAG, "Did range called");
+
+             if (beacons.size() > 0) {
+                 cleanSeenBeacons(beacons);
+                 for (Beacon beacon : beacons) {
+                     if (beacon.getDistance() < DISTANCE_THRESHOLD) {
+
+                         if (!seenBeacons.containsKey(beacon)) {
+
+                             Date foundTime = new Date(System.currentTimeMillis());
+                             seenBeacons.put(beacon, foundTime);
+
+                             OkHttpHandler okHttpHandler = new OkHttpHandler(MainActivity.this);
+
+
+                             String beaconName = getNameFromUUID(beacon.getId1().toString());
+
+                             if (beaconName.isEmpty()) {
+                                 beaconName = "Unregistered beacon";
+                             } else {
+                                 playSoundAndVibrate(true);
+                             }
+
+                             BeaconInfo beaconInfo = new BeaconInfo(beacon.getId1().toString(), Integer.parseInt(beacon.getId2().toString()), Integer.parseInt(beacon.getId3().toString()), beacon.getDistance(), beaconName, foundTime.toString());
+                             beaconInfoList.add(beaconInfo);
+                             Collections.reverse(beaconInfoList);
+
+                             mAdapter.notifyDataSetChanged();
+
+                             try {
+
+                                 JSONObject obj = new JSONObject();
+                                 obj.put("deviceId", deviceUUID);
+                                 obj.put("deviceTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Calendar.getInstance().getTime()));
+                                 obj.put("uuid", beacon.getId1());
+                                 obj.put("majorValue", beacon.getId2());
+                                 obj.put("minorValue", beacon.getId3());
+                                 obj.put("latitude", latitude);
+                                 obj.put("longitude", longitude);
+                                 obj.put("name", beaconName);
+
+                                 String request = obj.toString();
+
+                                 SharedPreferences prefs = getSharedPreferences("APIURL", MODE_PRIVATE);
+                                 String APIUrl = prefs.getString("APIUrl", null);
+
+                                 okHttpHandler.execute(APIUrl + "beaconInfo/create.php", request);
+                             } catch (Exception e) {
+                                 e.printStackTrace();
+                             }
+
+                         }
+                     } else {
+                         if (seenBeacons.containsKey(beacon)) {
+                             seenBeacons.remove(beacon);
+                             Toast.makeText(MainActivity.this, "A beacon crossed distance threshold.", Toast.LENGTH_LONG).show();
+                             Log.i(TAG, "One beacon removed due to crossing distance more than threshold" + beacon.getId1());
+                         }
+                     }
+                 }
+             } else {
+                 seenBeacons.clear();
+                 Toast.makeText(MainActivity.this, "No beacons around.", Toast.LENGTH_LONG).show();
+                 Log.i(TAG, "All seen beacons cleared");
+             }
+
+         }
+     };
+ */
     private String getNameFromUUID(String uuid) {
 
         if (beaconMap != null && beaconMap.size() > 0) {
             if (beaconMap.containsKey(uuid)) {
-                return beaconMap.get(uuid);
+                String name_thresholdDistance = beaconMap.get(uuid);
+                return name_thresholdDistance.split("###")[0];
             }
         }
 
-        return "";
+        return null;
+    }
+
+    private String getThresholdDistanceFromUUID(String uuid) {
+
+        if (beaconMap != null && beaconMap.size() > 0) {
+            if (beaconMap.containsKey(uuid)) {
+                String name_thresholdDistance = beaconMap.get(uuid);
+                return name_thresholdDistance.split("###")[1];
+            }
+        }
+
+        return null;
     }
 
     private JSONArray getBeacons() {
         OkHttpClient client = new OkHttpClient();
-        String url = URL + "beacon/read.php";
+        SharedPreferences prefs = getSharedPreferences("APIURL", MODE_PRIVATE);
+        String APIUrl = prefs.getString("APIUrl", null);
+        String url = APIUrl + "beacon/read.php";
 
         JSONObject jsonObj = new JSONObject();
         String jsonString = jsonObj.toString();
@@ -424,40 +630,33 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         return null;
     }
 
-    MonitorNotifier monitorNotifier = new MonitorNotifier() {
-        @Override
-        public void didEnterRegion(Region region) {
-            Log.i(TAG, "I just saw an beacon for the first time!");
-            // playSoundAndVibrate(true);
-            try {
-                Log.i(TAG, "Started Ranging");
-                beaconManager.startRangingBeaconsInRegion(new Region("uniqueId1", null, null, null));
-            } catch (RemoteException e) {
-                e.printStackTrace();
+    private String pingURL(String APIUrl) {
+        OkHttpClient client = new OkHttpClient();
+
+        String url = APIUrl + "ping.php";
+        JSONObject jsonObj = new JSONObject();
+        String jsonString = jsonObj.toString();
+
+        RequestBody body = RequestBody.create(JSON, jsonString);
+        Request request = new Request.Builder()
+                .url(url)
+                .post(body)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            JSONObject data = new JSONObject(response.body().string());
+            if (data.has("Status") && data.get("Status").equals("200")) {
+                return data.get("Message").toString();
             }
-
-            Toast.makeText(MainActivity.this, "I see a Beacon entered.", Toast.LENGTH_LONG).show();
-
+            return null;
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (JSONException e) {
+            e.printStackTrace();
         }
 
-        @Override
-        public void didExitRegion(Region region) {
-            Log.i(TAG, "I no longer see an beacon");
-            // playSoundAndVibrate(false);
-            try {
-                beaconManager.stopRangingBeaconsInRegion(region);
-            } catch (RemoteException e) {
-                e.printStackTrace();
-            }
-            Toast.makeText(MainActivity.this, "I see a Beacon exited.", Toast.LENGTH_LONG).show();
-
-        }
-
-        @Override
-        public void didDetermineStateForRegion(int state, Region region) {
-
-        }
-    };
+        return null;
+    }
 
     private void playSoundAndVibrate(boolean enter) {
 
@@ -481,25 +680,19 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         Log.i(TAG, "onBeaconServiceConnect() : Connected.");
 
         beaconManager.addRangeNotifier(rangeNotifier);
-        beaconManager.addMonitorNotifier(monitorNotifier);
 
         try {
-            stopRangingAndMonitoring();
-            Log.i(TAG, "Started Monitoring.");
-            beaconManager.startMonitoringBeaconsInRegion(new Region("uniqueId2", null, null, null));
+            stopRanging();
+            Log.i(TAG, "Started Ranging");
+            beaconManager.startRangingBeaconsInRegion(new Region("uniqueId1", null, null, null));
+
         } catch (RemoteException e) {
             Log.i(TAG, e.toString());
         }
     }
 
-    private void stopRangingAndMonitoring() {
-        for (Region region : beaconManager.getMonitoredRegions()) {
-            try {
-                beaconManager.stopMonitoringBeaconsInRegion(region);
-                Log.i(TAG, "Stop monitoring: " + region.toString());
-            } catch (RemoteException e) {
-            }
-        }
+    private void stopRanging() {
+
         for (Region region : beaconManager.getRangedRegions()) {
             try {
                 beaconManager.stopRangingBeaconsInRegion(region);
@@ -522,7 +715,8 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, String permissions[],
+                                           int[] grantResults) {
         switch (requestCode) {
             case PERMISSION_ALL:
 
@@ -554,7 +748,10 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
     protected void onDestroy() {
         super.onDestroy();
         unregisterReceiver(mReceiver);
-        stopRangingAndMonitoring();
+        stopRanging();
+        if (pollTimer != null) {
+            pollTimer.cancel();
+        }
         beaconManager.removeAllMonitorNotifiers();
         beaconManager.removeAllRangeNotifiers();
         beaconManager.unbind(this);
@@ -569,6 +766,10 @@ public class MainActivity extends AppCompatActivity implements BeaconConsumer {
         int id = item.getItemId();
         if (id == R.id.exit) {
             finish();
+            return true;
+        } else if (id == R.id.configure) {
+
+            showURLConfigurationDialog();
             return true;
         }
 

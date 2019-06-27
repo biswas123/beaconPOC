@@ -10,13 +10,15 @@ public class BeaconInfo {
 
     private int minor;
     private String name;
+    private String timeFound;
 
-    public BeaconInfo(String uuid, int major ,int minor,  double distance, String name) {
+    public BeaconInfo(String uuid, int major ,int minor,  double distance, String name , String timeFound) {
         this.uuid = uuid;
         this.distance = distance;
         this.major = major;
         this.minor = minor;
         this.name = name;
+        this.timeFound = timeFound;
     }
 
     public String getName(){
@@ -34,6 +36,7 @@ public class BeaconInfo {
     public int getMinor() {
         return minor;
     }
+    public String getTimeFound() {return timeFound;}
 
 
 }

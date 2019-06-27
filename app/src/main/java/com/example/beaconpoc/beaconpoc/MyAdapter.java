@@ -17,19 +17,21 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyViewHolder> {
     // Complex data items may need more than one view per item, and
     // you provide access to all the views for a data item in a view holder
     public static class MyViewHolder extends RecyclerView.ViewHolder {
-        public TextView major;
+        /*public TextView major;
         public TextView uuid;
         public TextView minor;
-        public TextView distance;
+        public TextView distance;*/
         public TextView name;
-
+        public  TextView timeFound;
         public MyViewHolder(View view) {
             super(view);
-            uuid = (TextView) view.findViewById(R.id.uuid);
+         /*   uuid = (TextView) view.findViewById(R.id.uuid);
             major = (TextView) view.findViewById(R.id.major);
             minor = (TextView) view.findViewById(R.id.minor);
-            distance = (TextView) view.findViewById(R.id.distance);
+            distance = (TextView) view.findViewById(R.id.distance);*/
+
             name = (TextView) view.findViewById(R.id.name);
+            timeFound = (TextView) view.findViewById(R.id.timeFound);
         }
     }
 
@@ -56,10 +58,13 @@ public class MyAdapter extends RecyclerView.Adapter<MyAdapter.MyViewHolder> {
         // - replace the contents of the view with that element
         BeaconInfo beaconInfo = beaconInfoList.get(position);
         holder.name.setText(beaconInfo.getName());
+        holder.timeFound.setText(beaconInfo.getTimeFound());
+
+        /*
         holder.uuid.setText("UUID: " + beaconInfo.getUuid());
         holder.major.setText("Major: " + String.valueOf(beaconInfo.getMajor()));
         holder.minor.setText("Minor: " + String.valueOf(beaconInfo.getMinor()));
-        holder.distance.setText("Approx. distance: " + String.format("%.2f", beaconInfo.getDistance()) + "m");
+        holder.distance.setText("Approx. distance: " + String.format("%.2f", beaconInfo.getDistance()) + "m");*/
 
     }
 
